@@ -6,19 +6,22 @@ import { knex } from '../database'
 import { checkSessionIdExists } from '../middlewares/check-session-is-exists'
 
 export async function transactionRoutes(app: FastifyInstance) {
-  app.get('/summary', async () => {
+  app.get('/summary', { preHandler: [checkSessionIdExists] }, async (req) => {
+    const { sessionId } = req.cookies
+
     const summary = await knex('transactions')
+      .where('session_id', sessionId)
       .sum('amount', { as: 'amount' })
       .first()
 
     return { summary }
   })
 
-  app.get('/', { preHandler: [checkSessionIdExists] }, async (req, rep) => {
-    const { session_id } = req.cookies
+  app.get('/', { preHandler: [checkSessionIdExists] }, async (req) => {
+    const { sessionId } = req.cookies
 
     const transactions = await knex('transactions')
-      .where('session_id', session_id)
+      .where('session_id', sessionId)
       .select()
 
     return {
@@ -26,14 +29,21 @@ export async function transactionRoutes(app: FastifyInstance) {
     }
   })
 
-  app.get('/:id', async (req) => {
+  app.get('/:id', { preHandler: [checkSessionIdExists] }, async (req) => {
     const getTransactionsParamsSchema = z.object({
       id: z.string().uuid(),
     })
 
     const { id } = getTransactionsParamsSchema.parse(req.params)
 
-    const transaction = await knex('transactions').where('id', id).first()
+    const { sessionId } = req.cookies
+
+    const transaction = await knex('transactions')
+      .where({
+        session_id: sessionId,
+        id,
+      })
+      .first()
 
     return { transaction }
   })
@@ -47,11 +57,12 @@ export async function transactionRoutes(app: FastifyInstance) {
 
     const { title, amount, type } = createTransactionBodySchema.parse(req.body)
 
-    let session_id = req.cookies.session_id
+    let sessionId = req.cookies.sessionId
 
-    if (!session_id) {
-      session_id = randomUUID()
-      rep.cookie('session_id', session_id, {
+    if (!sessionId) {
+      sessionId = randomUUID()
+
+      rep.setCookie('sessionId', sessionId, {
         path: '/',
         maxAge: 60 * 60 * 24 * 7, // 7 days
       })
@@ -61,7 +72,7 @@ export async function transactionRoutes(app: FastifyInstance) {
       id: randomUUID(),
       title,
       amount: type === 'credit' ? amount : amount * -1,
-      session_id,
+      session_id: sessionId,
     })
 
     return rep.status(201).send()
