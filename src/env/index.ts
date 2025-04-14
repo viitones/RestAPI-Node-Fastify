@@ -9,6 +9,7 @@ if (process.env.NODE_ENV === 'test') {
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['dev', 'test', 'production']).default('dev'),
+  DATABASE_CLIENT: z.enum(['sqlite3', 'pg']).default('sqlite3'),
   DATABASE_URL: z.string(),
   PORT: z.coerce.number().default(3333),
 })
